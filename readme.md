@@ -1,0 +1,3 @@
+Must have:
+    scipy
+    
