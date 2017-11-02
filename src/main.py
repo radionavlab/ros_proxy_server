@@ -11,6 +11,7 @@ from scipy import interpolate
 import rospy
 import std_msgs.msg
 import geometry_msgs.msg
+import tf
 
 from app_pathplanner_interface.msg import PVATrajectory
 from app_pathplanner_interface.msg import PVA_Stamped
@@ -80,11 +81,49 @@ def create_pva_trajectory(trajectory):
     # S changes smooting
     # K is degree of spline curve
     tck, u = interpolate.splprep([x, y, z], s=0.5, k=5, u=t)
-    sample_time = 0.05
-    unew = np.arange(2*sample_time, final_time - sample_time, sample_time)
-    pos_sample = interpolate.splev(unew, tck, der=0)
-    vel_sample = interpolate.splev(unew, tck, der=1)
-    acc_sample = interpolate.splev(unew, tck, der=2)
+    sample_time_interval = 0.05
+    # Be careful sampling at the endpoints [0, tf] because the spline is undefined
+    time_samples = np.arange(2*sample_time_interval, final_time-2*sample_time_interval, sample_time_interval)
+    pos_samples = interpolate.splev(time_samples, tck, der=0)
+    vel_samples = interpolate.splev(time_samples, tck, der=1)
+    acc_samples = interpolate.splev(time_samples, tck, der=2)
+
+    # Fill in the header info
+    trajectory_header       = std_msgs.msg.Header()
+    trajectory_header.stamp = rospy.get_rostime()
+    trajectory_msg.header   = trajectory_header
+
+    # Create point messages
+    for i in range(len(time_samples)):
+        # Create PVA point
+        point_msg = PVA_Stamped()
+ 
+        # Create header
+        point_header       = std_msgs.msg.Header()
+        point_header.stamp = rospy.Time.from_sec(time_samples[i])
+        point_msg.header   = point_header
+ 
+        # Create pose message
+        pos_msg = geometry_msgs.msg.Pose()
+        pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[0][i], pos_samples[1][i], pos_samples[2][i]
+        quaternion = tf.transformations.quaternion_from_euler(0, 0, 0) # Assuming zero angles 
+        pos_msg.orientation.x, pos_msg.orientation.y, pos_msg.orientation.z, pos_msg.orientation.w  = quaternion[0], quaternion[1], quaternion[2], quaternion[3]
+        point_msg.pos = pos_msg
+ 
+        # Create velocity message
+        vel_msg = geometry_msgs.msg.Twist()
+        vel_msg.linear.x, vel_msg.linear.y, vel_msg.linear.z = vel_samples[0][i], vel_samples[1][i], vel_samples[2][i]
+        vel_msg.angular.x, vel_msg.angular.y, vel_msg.angular.z = 0, 0, 0 # Assuming no change in angles
+        point_msg.vel = vel_msg
+ 
+        # Create acceleration message
+        acc_msg = geometry_msgs.msg.Accel()
+        acc_msg.linear.x, acc_msg.linear.y, acc_msg.linear.z = acc_samples[0][i], acc_samples[1][i], acc_samples[2][i]
+        acc_msg.angular.x, acc_msg.angular.y, acc_msg.angular.z = 0, 0, 0 # Assuming no change in angles
+        point_msg.acc = acc_msg
+ 
+        # Append the PVA Point to the PVA Trajectory
+        trajectory_msg.pva.append(point_msg)
 
     # Plotting
     plt.figure()
@@ -92,7 +131,7 @@ def create_pva_trajectory(trajectory):
     # Position subplot
     plt.subplot(321)
     plt.title('Position (m)')
-    plt.plot(pos_sample[0], pos_sample[1], x, y)
+    plt.plot(pos_samples[0], pos_samples[1], x, y)
     axes = plt.gca()
     axes.set_xlim([-2.5, 2.5])
     axes.set_ylim([-2.5,2.5])
@@ -101,59 +140,26 @@ def create_pva_trajectory(trajectory):
     # Velocity Subplot
     plt.subplot(323)
     plt.title('Velocity (m/s)')
-    plt.plot(vel_sample[0])
+    plt.plot(vel_samples[0])
     plt.grid(True)
 
     plt.subplot(324)
     plt.title('Velocity (m/s)')
-    plt.plot(vel_sample[1])
+    plt.plot(vel_samples[1])
     plt.grid(True)
 
     # Acceleration subplot
     plt.subplot(325)
     plt.title('Acceleration (m/s^2)')
-    plt.plot(acc_sample[0])
+    plt.plot(acc_samples[0])
     plt.grid(True)
 
     plt.subplot(326)
     plt.title('Acceleration (m/s^2)')
-    plt.plot(acc_sample[1])
+    plt.plot(acc_samples[1])
     plt.grid(True)
 
     plt.show()
-
-    # Fill in the header info
-    trajectory_header       = std_msgs.msg.Header()
-    trajectory_header.stamp = rospy.get_rostime()
-    trajectory_msg.header   = trajectory_header
-
-    # Create point messages
-    # for i in range(len(x_pos_samples)):
-        # Create PVA point
-        # point_msg = PVA_Stamped()
- 
-        # Create header
-        # point_header       = std_msgs.msg.Header()
-        # point_header.stamp = rospy.Time.from_sec(t_samples[i])
-        # point_msg.header   = point_header
- 
-        # Create position message
-        # pos_msg = geometry_msgs.msg.Pose()
-        # pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = x_pos_samples[i], y_pos_samples[i], z_pos_samples[i]
-        # point_msg.pos = pos_msg
- 
-        # Create velocity message
-        # vel_msg = geometry_msgs.msg.Twist()
-        # vel_msg.linear.x, vel_msg.linear.y, vel_msg.linear.z = x_vel_samples[i], y_vel_samples[i], z_vel_samples[i]
-        # point_msg.vel = vel_msg
- 
-        # Create acceleration message
-        # acc_msg = geometry_msgs.msg.Accel()
-        # acc_msg.linear.x, acc_msg.linear.y, acc_msg.linear.z = x_acc_samples[i], y_acc_samples[i], z_acc_samples[i]
-        # point_msg.acc = acc_msg
- 
-        # Append the PVA Point to the PVA Trajectory
-        # trajectory_msg.pva.append(point_msg)
  
     return trajectory_msg
 
@@ -165,7 +171,13 @@ def start_proxy_server(server_pipe):
 
 
 def start_ros_node(ros_pipe):
+    # Initialize the node
     rospy.init_node('trajectory_generator_proxy', anonymous=True)
+
+    # Trajectory publisher
+    PVA_publisher = rospy.Publisher('trajectory', PVATrajectory, queue_size=10)
+
+    # Main loop
     rate = rospy.Rate(10)
     while not rospy.is_shutdown():
 
@@ -174,7 +186,7 @@ def start_ros_node(ros_pipe):
             if ros_pipe.poll() == True:
                 trajectory = ros_pipe.recv()
                 pva_trajectory = create_pva_trajectory(trajectory)
-                # print pva_trajectory
+                PVA_publisher.publish(pva_trajectory)
             else:
                 break
 
