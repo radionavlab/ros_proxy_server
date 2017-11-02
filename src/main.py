@@ -105,7 +105,9 @@ def create_pva_trajectory(trajectory):
  
         # Create pose message
         pos_msg = geometry_msgs.msg.Pose()
-        pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[0][i], pos_samples[1][i], pos_samples[2][i]
+        # pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[0][i], pos_samples[1][i], pos_samples[2][i]
+        # Fucking coordinate systems
+        pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[1][i], -pos_samples[0][i], pos_samples[2][i]
         quaternion = tf.transformations.quaternion_from_euler(0, 0, 0) # Assuming zero angles 
         pos_msg.orientation.x, pos_msg.orientation.y, pos_msg.orientation.z, pos_msg.orientation.w  = quaternion[0], quaternion[1], quaternion[2], quaternion[3]
         point_msg.pos = pos_msg
@@ -159,7 +161,7 @@ def create_pva_trajectory(trajectory):
     plt.plot(acc_samples[1])
     plt.grid(True)
 
-    plt.show()
+    # plt.show()
  
     return trajectory_msg
 
