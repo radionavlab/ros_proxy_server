@@ -26,6 +26,7 @@ class Point():
         assert 'x' in self.__dict__
         assert 'y' in self.__dict__
         assert 'z' in self.__dict__
+        assert 'w' in self.__dict__
         assert 't' in self.__dict__
 
     def __str__(self):
