@@ -18,7 +18,7 @@ from app_pathplanner_interface.msg import PVA_Stamped
 
 class Point(): 
     '''
-    A point has x, y, z, and t components
+    A point has x, y, z, w, and t components
     '''
     def __init__(self, data):
         self.__dict__ = data
@@ -77,6 +77,16 @@ def create_pva_trajectory(trajectory):
     w = np.array([point.w for point in trajectory.points])
     t = np.array([(point.t - trajectory.points[0].t) / 1000.0 for point in trajectory.points])
 
+    # Pre- and Post-pend points to make low velocity and acceleration at endpoints
+    num_add = 20
+    dt = t[1] - t[0]
+    for i in range(num_add):
+        np.insert(x, 0, x[0])
+        np.insert(y, 0, y[0])
+        np.insert(z, 0, z[0])
+        np.insert(w, 0, w[0])
+        np.insert(t, 0, t[0] - (i+1)*(dt))
+
     initial_time = t[0]
     final_time = t[-1]
 
@@ -85,7 +95,8 @@ def create_pva_trajectory(trajectory):
     tck, u = interpolate.splprep([x, y, z, w], s=0.5, k=5, u=t)
     sample_time_interval = 0.05
     # Be careful sampling at the endpoints [0, tf] because the spline is undefined
-    time_samples = np.arange(2*sample_time_interval, final_time-2*sample_time_interval, sample_time_interval)
+    # time_samples = np.arange(2*sample_time_interval, final_time-2*sample_time_interval, sample_time_interval)
+    time_samples = np.arange(0, final_time, sample_time_interval)
     pos_samples = interpolate.splev(time_samples, tck, der=0)
     vel_samples = interpolate.splev(time_samples, tck, der=1)
     acc_samples = interpolate.splev(time_samples, tck, der=2)
@@ -108,7 +119,7 @@ def create_pva_trajectory(trajectory):
         # Create pose message
         pos_msg = geometry_msgs.msg.Pose()
         # pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[0][i], pos_samples[1][i], pos_samples[2][i]
-        # Fucking coordinate systems
+        # Must rotate to local coordinate system
         pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[1][i], -pos_samples[0][i], pos_samples[2][i]
         yaw_android = pos_samples[3][i]
         yaw = math.atan2(-math.cos(yaw_android), -math.sin(yaw_android))
@@ -173,7 +184,7 @@ def create_pva_trajectory(trajectory):
     plt.plot(acc_samples[1])
     plt.grid(True)
 
-    # plt.show()
+    plt.show()
  
     return trajectory_msg
 
