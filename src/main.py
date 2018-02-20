@@ -26,6 +26,7 @@ class Point():
         assert 'x' in self.__dict__
         assert 'y' in self.__dict__
         assert 'z' in self.__dict__
+        assert 'w' in self.__dict__
         assert 't' in self.__dict__
 
     def __str__(self):
@@ -73,6 +74,7 @@ def create_pva_trajectory(trajectory):
     x = np.array([point.x for point in trajectory.points])
     y = np.array([point.y for point in trajectory.points])
     z = np.array([point.z for point in trajectory.points])
+    w = np.array([point.w for point in trajectory.points])
     t = np.array([(point.t - trajectory.points[0].t) / 1000.0 for point in trajectory.points])
 
     initial_time = t[0]
@@ -80,7 +82,7 @@ def create_pva_trajectory(trajectory):
 
     # S changes smooting
     # K is degree of spline curve
-    tck, u = interpolate.splprep([x, y, z], s=0.5, k=5, u=t)
+    tck, u = interpolate.splprep([x, y, z, w], s=0.5, k=5, u=t)
     sample_time_interval = 0.05
     # Be careful sampling at the endpoints [0, tf] because the spline is undefined
     time_samples = np.arange(2*sample_time_interval, final_time-2*sample_time_interval, sample_time_interval)
@@ -108,7 +110,10 @@ def create_pva_trajectory(trajectory):
         # pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[0][i], pos_samples[1][i], pos_samples[2][i]
         # Fucking coordinate systems
         pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[1][i], -pos_samples[0][i], pos_samples[2][i]
-        quaternion = tf.transformations.quaternion_from_euler(0, 0, 0) # Assuming zero angles 
+        yaw_android = pos_samples[3][i]
+        yaw = math.atan2(-math.cos(yaw_android), -math.sin(yaw_android))
+        print yaw
+        quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
         pos_msg.orientation.x, pos_msg.orientation.y, pos_msg.orientation.z, pos_msg.orientation.w  = quaternion[0], quaternion[1], quaternion[2], quaternion[3]
         point_msg.pos = pos_msg
  
@@ -136,7 +141,14 @@ def create_pva_trajectory(trajectory):
     plt.plot(pos_samples[0], pos_samples[1], x, y)
     axes = plt.gca()
     axes.set_xlim([-2.5, 2.5])
-    axes.set_ylim([-2.5,2.5])
+    axes.set_ylim([0,5])
+    plt.grid(True)
+
+    plt.subplot(322)
+    plt.title('Altitude (m)')
+    plt.plot(pos_samples[2])
+    axes = plt.gca()
+    axes.set_ylim([0,3])
     plt.grid(True)
 
     # Velocity Subplot
@@ -177,7 +189,7 @@ def start_ros_node(ros_pipe):
     rospy.init_node('trajectory_generator_proxy', anonymous=True)
 
     # Trajectory publisher
-    PVA_publisher = rospy.Publisher('trajectory', PVATrajectory, queue_size=10)
+    PVA_publisher = rospy.Publisher('/phoenix/trajectory', PVATrajectory, queue_size=10)
 
     # Main loop
     rate = rospy.Rate(10)
