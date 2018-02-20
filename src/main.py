@@ -7,6 +7,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from scipy import interpolate
+import random
 
 import rospy
 import std_msgs.msg
@@ -77,25 +78,38 @@ def create_pva_trajectory(trajectory):
     w = np.array([point.w for point in trajectory.points])
     t = np.array([(point.t - trajectory.points[0].t) / 1000.0 for point in trajectory.points])
 
-    # Pre- and Post-pend points to make low velocity and acceleration at endpoints
-    num_add = 20
-    dt = t[1] - t[0]
-    for i in range(num_add):
-        np.insert(x, 0, x[0])
-        np.insert(y, 0, y[0])
-        np.insert(z, 0, z[0])
-        np.insert(w, 0, w[0])
-        np.insert(t, 0, t[0] - (i+1)*(dt))
-
     initial_time = t[0]
     final_time = t[-1]
+
+    # Pre- and Post-pend points to make low velocity and acceleration at endpoints
+    num_add = 100
+    dt = t[1] - t[0]
+
+    pre = np.array([x[0] for i in range(num_add)])
+    post = np.array([x[-1] for i in range(num_add)])
+    x = np.concatenate([pre, x, post])
+
+    pre = np.array([y[0] for i in range(num_add)])
+    post = np.array([y[-1] for i in range(num_add)])
+    y = np.concatenate([pre, y, post])
+
+    pre = np.array([z[0] for i in range(num_add)])
+    post = np.array([z[-1] for i in range(num_add)])
+    z = np.concatenate([pre, z, post])
+
+    pre = np.array([w[0] for i in range(num_add)])
+    post = np.array([w[-1] for i in range(num_add)])
+    w = np.concatenate([pre, w, post])
+
+    pre = np.array([t[0] - (num_add - i)*dt for i in range(num_add)])
+    post = np.array([t[-1] + (i+1)*dt for i in range(num_add)])
+    t = np.concatenate([pre, t, post])
 
     # S changes smooting
     # K is degree of spline curve
     tck, u = interpolate.splprep([x, y, z, w], s=0.5, k=5, u=t)
     sample_time_interval = 0.05
     # Be careful sampling at the endpoints [0, tf] because the spline is undefined
-    # time_samples = np.arange(2*sample_time_interval, final_time-2*sample_time_interval, sample_time_interval)
     time_samples = np.arange(0, final_time, sample_time_interval)
     pos_samples = interpolate.splev(time_samples, tck, der=0)
     vel_samples = interpolate.splev(time_samples, tck, der=1)
@@ -118,12 +132,10 @@ def create_pva_trajectory(trajectory):
  
         # Create pose message
         pos_msg = geometry_msgs.msg.Pose()
-        # pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[0][i], pos_samples[1][i], pos_samples[2][i]
         # Must rotate to local coordinate system
         pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[1][i], -pos_samples[0][i], pos_samples[2][i]
         yaw_android = pos_samples[3][i]
         yaw = math.atan2(-math.cos(yaw_android), -math.sin(yaw_android))
-        print yaw
         quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
         pos_msg.orientation.x, pos_msg.orientation.y, pos_msg.orientation.z, pos_msg.orientation.w  = quaternion[0], quaternion[1], quaternion[2], quaternion[3]
         point_msg.pos = pos_msg
@@ -157,7 +169,7 @@ def create_pva_trajectory(trajectory):
 
     plt.subplot(322)
     plt.title('Altitude (m)')
-    plt.plot(pos_samples[2])
+    plt.plot(time_samples, pos_samples[2])
     axes = plt.gca()
     axes.set_ylim([0,3])
     plt.grid(True)
@@ -165,23 +177,23 @@ def create_pva_trajectory(trajectory):
     # Velocity Subplot
     plt.subplot(323)
     plt.title('Velocity (m/s)')
-    plt.plot(vel_samples[0])
+    plt.plot(time_samples, vel_samples[0])
     plt.grid(True)
 
     plt.subplot(324)
     plt.title('Velocity (m/s)')
-    plt.plot(vel_samples[1])
+    plt.plot(time_samples, vel_samples[1])
     plt.grid(True)
 
     # Acceleration subplot
     plt.subplot(325)
     plt.title('Acceleration (m/s^2)')
-    plt.plot(acc_samples[0])
+    plt.plot(time_samples, acc_samples[0])
     plt.grid(True)
 
     plt.subplot(326)
     plt.title('Acceleration (m/s^2)')
-    plt.plot(acc_samples[1])
+    plt.plot(time_samples, acc_samples[1])
     plt.grid(True)
 
     plt.show()
