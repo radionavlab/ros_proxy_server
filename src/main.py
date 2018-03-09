@@ -122,6 +122,7 @@ def create_pva_trajectory(trajectory):
 
     # Create point messages
     for i in range(len(time_samples)):
+
         # Create PVA point
         point_msg = PVA_Stamped()
  
@@ -132,7 +133,8 @@ def create_pva_trajectory(trajectory):
  
         # Create pose message
         pos_msg = geometry_msgs.msg.Pose()
-        # Must rotate to local coordinate system
+        # Must rotate to ENU coordinate system
+        # Arena is set up such that it is -90 degrees rotated from ENU : X, Y, Z = Y, -X, Z
         pos_msg.position.x, pos_msg.position.y, pos_msg.position.z = pos_samples[1][i], -pos_samples[0][i], pos_samples[2][i]
         yaw_android = pos_samples[3][i]
         yaw = math.atan2(-math.cos(yaw_android), -math.sin(yaw_android))
@@ -142,13 +144,13 @@ def create_pva_trajectory(trajectory):
  
         # Create velocity message
         vel_msg = geometry_msgs.msg.Twist()
-        vel_msg.linear.x, vel_msg.linear.y, vel_msg.linear.z = vel_samples[0][i], vel_samples[1][i], vel_samples[2][i]
+        vel_msg.linear.x, vel_msg.linear.y, vel_msg.linear.z = vel_samples[1][i], -vel_samples[0][i], vel_samples[2][i]
         vel_msg.angular.x, vel_msg.angular.y, vel_msg.angular.z = 0, 0, 0 # Assuming no change in angles
         point_msg.vel = vel_msg
  
         # Create acceleration message
         acc_msg = geometry_msgs.msg.Accel()
-        acc_msg.linear.x, acc_msg.linear.y, acc_msg.linear.z = acc_samples[0][i], acc_samples[1][i], acc_samples[2][i]
+        acc_msg.linear.x, acc_msg.linear.y, acc_msg.linear.z = acc_samples[1][i], -acc_samples[0][i], acc_samples[2][i]
         acc_msg.angular.x, acc_msg.angular.y, acc_msg.angular.z = 0, 0, 0 # Assuming no change in angles
         point_msg.acc = acc_msg
  
@@ -164,7 +166,7 @@ def create_pva_trajectory(trajectory):
     plt.plot(pos_samples[0], pos_samples[1], x, y)
     axes = plt.gca()
     axes.set_xlim([-2.5, 2.5])
-    axes.set_ylim([0,5])
+    axes.set_ylim([-5,5])
     plt.grid(True)
 
     plt.subplot(322)
@@ -177,12 +179,12 @@ def create_pva_trajectory(trajectory):
     # Velocity Subplot
     plt.subplot(323)
     plt.title('Velocity (m/s)')
-    plt.plot(time_samples, vel_samples[0])
+    plt.plot(time_samples, vel_samples[1])
     plt.grid(True)
 
     plt.subplot(324)
     plt.title('Velocity (m/s)')
-    plt.plot(time_samples, vel_samples[1])
+    plt.plot(time_samples, -vel_samples[0])
     plt.grid(True)
 
     # Acceleration subplot
@@ -196,13 +198,14 @@ def create_pva_trajectory(trajectory):
     plt.plot(time_samples, acc_samples[1])
     plt.grid(True)
 
-    plt.show()
+    #plt.show()
  
     return trajectory_msg
 
 
 def start_proxy_server(server_pipe):
     HOST, PORT = '', 8080
+    SocketServer.TCPServer.allow_reuse_address = True
     server = ProxyServer((HOST, PORT), ProxyServerHandler, server_pipe)
     server.serve_forever()
 
